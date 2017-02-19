@@ -3,7 +3,9 @@ package org.usfirst.frc.team5872.robot;
 
 import com.kauailabs.navx.frc.AHRS;
 
+import edu.wpi.cscore.UsbCamera;
 import edu.wpi.first.wpilibj.AnalogGyro;
+import edu.wpi.first.wpilibj.CameraServer;
 import edu.wpi.first.wpilibj.IterativeRobot;
 import edu.wpi.first.wpilibj.I2C;
 import edu.wpi.first.wpilibj.Joystick;
@@ -15,35 +17,53 @@ import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.command.Command;
 import edu.wpi.first.wpilibj.command.Scheduler;
 import edu.wpi.first.wpilibj.livewindow.LiveWindow;
+
+import org.usfirst.frc.team5872.robot.commands.AutoDriveToLine;
 import org.usfirst.frc.team5872.robot.commands.ExampleCommand;
+import org.usfirst.frc.team5872.robot.subsystems.DriveTrain;
 import org.usfirst.frc.team5872.robot.subsystems.ExampleSubsystem;
+import org.usfirst.frc.team5872.robot.subsystems.Flywheel;
+
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj.vision.VisionPipeline;
+import edu.wpi.first.wpilibj.vision.VisionThread;
 
 public class Robot extends IterativeRobot {
 
-	public static final ExampleSubsystem exampleSubsystem = new ExampleSubsystem();
-
+	
     Command autonomousCommand;
     SendableChooser chooser;
     
     //Motor Controller Declarations
-    CANTalon fl;
-	CANTalon bl;
-	CANTalon fr;
-	CANTalon br;
-    
+    public static CANTalon fl;
+	public static CANTalon bl;
+	public static CANTalon fr;
+	public static CANTalon br;
+	public static CANTalon flywheelCIM;
+	public static CANTalon ballStirrer;
+	public static CANTalon intake;
+	public static CANTalon winch;
+	
+	//Sensor Declarations and Variables
+    AnalogGyro gyro;
+    public static AHRS ahrs;
+    PIDController turnController;
+    double rotateToAngleRate;
+    double Kp = 0.03;
+	
+	
+	//Subsystems
+	public static Flywheel flywheel;
+	public static DriveTrain drive;
     //Essential Declarations
     RobotDrive myRobot;
     Joystick stick;
     Timer timer;
     
-    //Sensor Declarations and Variables
-    AnalogGyro gyro;
-    AHRS ahrs;
-    PIDController turnController;
-    double rotateToAngleRate;
-    double Kp = 0.03;
+    
+    
+    
     
 
     
@@ -55,6 +75,7 @@ public class Robot extends IterativeRobot {
     	
         chooser = new SendableChooser();
         chooser.addDefault("Default Auto", new ExampleCommand());
+        chooser.addObject("AutoDriveToLine", new AutoDriveToLine());
         //chooser.addObject("My Auto", new MyAutoCommand());
         SmartDashboard.putData("Auto mode", chooser);
         
@@ -63,6 +84,8 @@ public class Robot extends IterativeRobot {
         bl = new CANTalon(2);
         fr = new CANTalon(1);
         br = new CANTalon(0);
+        flywheelCIM = new CANTalon(4);
+        ballStirrer = new CANTalon(5);
         
         //Initialize encoders
         fl.configEncoderCodesPerRev(1000);
@@ -70,14 +93,19 @@ public class Robot extends IterativeRobot {
         fr.configEncoderCodesPerRev(1000);
         br.configEncoderCodesPerRev(1000);
         
+        //Sensor Assignments
+        gyro = new AnalogGyro(1);
+        ahrs = new AHRS(I2C.Port.kMXP); 
+       
+        
+        //Initialize Subsystems
+        flywheel = new Flywheel();
+        drive = new DriveTrain();
+        
         //Essential Assignments
         myRobot = new RobotDrive(3, 1, 2, 0);
         stick = new Joystick(0);
         timer = new Timer();
-        
-        //Sensor Assignments
-        gyro = new AnalogGyro(1);
-        ahrs = new AHRS(I2C.Port.kMXP); 
         
         
     }
@@ -107,16 +135,15 @@ public class Robot extends IterativeRobot {
     public void autonomousInit() {
         autonomousCommand = (Command) chooser.getSelected();
         
-		/*String autoSelected = SmartDashboard.getString("Auto Selector", "Default");
+		String autoSelected = SmartDashboard.getString("Auto Selector", "Default");
 		switch(autoSelected) {
-		case "My Auto":
-			autonomousCommand = new MyAutoCommand();
+		case "AutoDriveToLine":
+			autonomousCommand = new AutoDriveToLine();
 			break;
-		case "Default Auto":
 		default:
 			autonomousCommand = new ExampleCommand();
 			break;
-		}*/
+		}
     	
     	//schedule the autonomous command (example)
         if (autonomousCommand != null) 
@@ -129,6 +156,7 @@ public class Robot extends IterativeRobot {
     /**
      * This function is called periodically during autonomous
      */
+    /*
     public void autonomous() {
     	
         Scheduler.getInstance().run();
@@ -143,12 +171,12 @@ public class Robot extends IterativeRobot {
         
         myRobot.drive(0.0, 0.0); 
         
-        /*Drive for 2 seconds
+        Drive for 2 seconds
         if (timer.get() < 2.0)
              myRobot.drive(-0.5,  0); //drive forwards half speed
         else 
-             myRobot.drive(0.0, 0.0); //stop robot*/
-    }
+             myRobot.drive(0.0, 0.0); //stop robot
+    }*/
 
     public void teleopInit() {
     	
@@ -222,7 +250,7 @@ public class Robot extends IterativeRobot {
         	}
         	
         	if (stick.getRawButton(1) && ahrs.getAngle() < 5){
-        		gyroRight(90, 0.5);
+        		drive.gyroRight(90, 0.5);
         	}
         	else{
         		fl.set(0);
@@ -238,71 +266,6 @@ public class Robot extends IterativeRobot {
      */
     public void testPeriodic() {
         LiveWindow.run();
-    }
-    public void gyroRight(int degrees, double speed){
-    	
-    	if(ahrs.getAngle() < degrees && ahrs.getAngle() == 0){
-    		
-    		setSpeed(speed,-speed);
-    		
-    	}
-    	else{
-    		
-    		stopMotors();
-    		ahrs.reset();
-    		
-    	}
-    	
-    }
-    public void gyrotLeft(int degrees, double speed){
-    	
-    	if(ahrs.getAngle() < degrees && ahrs.getAngle() == 0){
-    		setSpeed(-speed,speed);
-    	}
-    	else{
-    		stopMotors();
-    		ahrs.reset();
-    	}
-    	
-    }
-    public void setSpeed(double left,double right) {
-    	fl.set(left);
-		fr.set(right);
-		bl.set(left);
-		br.set(right);
-    }
-    public void stopMotors() {
-    	fl.set(0);
-		fr.set(0);
-		bl.set(0);
-		br.set(0);
-    }
-    public void resetEncoders() {
-    	fl.setEncPosition(0);
-    	bl.setEncPosition(0);
-    	fr.setEncPosition(0);
-    	br.setEncPosition(0);
-    }
-    public void encoderDrive(int rightTicks, int leftTicks, double leftPower, double rightPower, double timeout) {
-    	resetEncoders();
-    	int targetFrontRight = fr.getEncPosition()+rightTicks;
-    	int targetBackRight = br.getEncPosition()+rightTicks;
-    	int targetFrontLeft = fl.getEncPosition()+leftTicks;
-    	int targetBackLeft = bl.getEncPosition()+leftTicks;
-    	int curFrontRight = fr.getEncPosition();
-    	int curBackRight = br.getEncPosition();
-    	int curFrontLeft = fl.getEncPosition();
-    	int curBackLeft = bl.getEncPosition();
-    	boolean done = (Math.abs(targetFrontRight - curFrontRight) < 5 || Math.abs(targetBackRight - curBackRight) < 5 || Math.abs(targetFrontLeft - curFrontLeft) < 5 || Math.abs(targetBackLeft - curBackLeft) < 5);
-    	setSpeed(leftPower,rightPower);
-    	while(isAutonomous() && !done) {
-    		curFrontRight = fr.getEncPosition();
-        	curBackRight = br.getEncPosition();
-        	curFrontLeft = fl.getEncPosition();
-        	curBackLeft = bl.getEncPosition();
-        	done = (Math.abs(targetFrontRight - curFrontRight) < 5 || Math.abs(targetBackRight - curBackRight) < 5 || Math.abs(targetFrontLeft - curFrontLeft) < 5 || Math.abs(targetBackLeft - curBackLeft) < 5);
-    	}
-    	stopMotors();
     }
 }
 

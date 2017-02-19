@@ -7,9 +7,9 @@ import edu.wpi.first.wpilibj.command.Command;
 /**
  *
  */
-public class DriveToKeyRedOne extends Command {
+public class DoGearMiddleFromStart extends Command {
 
-    public DriveToKeyRedOne() {
+    public DoGearMiddleFromStart() {
         // Use requires() here to declare subsystem dependencies
         // eg. requires(chassis);
     	requires(Robot.drive);
@@ -17,8 +17,13 @@ public class DriveToKeyRedOne extends Command {
 
     // Called just before this Command runs the first time
     protected void initialize() {
-    	Robot.drive.forwardTicks(.5, 5000, 3);
-    	Robot.drive.gyroRight(90,.5)
+    	Robot.drive.forwardTicks(.5, 100000, 5);
+    	try {
+			wait(3000);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
     }
 
     // Called repeatedly when this Command is scheduled to run
